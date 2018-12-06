@@ -12,8 +12,8 @@ knitr::opts_chunk$set(echo = TRUE)
 1) Pull and clean phenotype data for subsequent analyses, identify EHR-defined cases based on valid definition from Keenan&Kirchner et al. unpublished 2018
 ``` {r eval=TRUE}
 #Read Data
-#Note for race A = "Asian/Pacific", B = "Black", I = "Native American", M = "Mixed", N = "Other", U = "Unknown", W = "White"
-EHRdefined.OSAcases.Vanderbilt=read.csv(file = 'C:/Users/veatcho/Desktop/Grants/OSA Genetics R01/OSAGenetics_DATA_2018-11-07_1203.csv', header = TRUE, sep = ",", fill=TRUE)
+#Note for race variable: A = "Asian/Pacific", B = "Black", I = "Native American", M = "Mixed", N = "Other", U = "Unknown", W = "White"
+EHRdefined.OSAcases.Vanderbilt <- read.csv(file = 'C:/Users/veatcho/Desktop/Grants/OSA Genetics R01/OSAGenetics_DATA_2018-11-07_1203.csv', header = TRUE, sep = ",", fill=TRUE)
 
 #Read Data with duplicate row names (i.e. indicate no row names skip=1) and allow variables with missing values
 
@@ -31,7 +31,7 @@ OSAICD9s <-
   filter(grepl("leep apnea", CODE_DESC)) %>%
   group_by(GRID)
 
-#Above code is cleaner and below should produce the same as above....always good to check and useful if there are no fuzzy matches for grep
+#Above code is shorter and should produce the same as below; however, good to check and useful if there are no fuzzy matches for grep
 OSAICD9snums <- 
   Case.ICD9codes %>%
   filter(CODE==327.20 | CODE==327.23 | CODE==327.29 | CODE==780.51 | CODE==780.53 | CODE==780.57)
@@ -74,7 +74,8 @@ CaseBMI <-
   arrange(BMIDATE)
 
 EHRdefined.OSAcases.Vanderbilt <- EHRdefined.OSAcases.Vanderbilt %>%
-  select(GRID=study_id, gender, race) %>%
+  select(GRID=study_id, gender, race, dob) %>%
+  mutate(dob = as.Date(dob))
   
 
 vandyosaicdsbmi<-
