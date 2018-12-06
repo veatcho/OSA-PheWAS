@@ -1,0 +1,119 @@
+---
+title: "OSA PheWAS_Vanderbilt"
+author: "Olivia J. Veatch"
+date: "December 6, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+1) Pull and clean phenotype data for subsequent analyses, identify EHR-defined cases based on valid definition from Keenan&Kirchner et al. unpublished 2018
+``` {r eval=TRUE}
+#Read Data
+#Note for race A = "Asian/Pacific", B = "Black", I = "Native American", M = "Mixed", N = "Other", U = "Unknown", W = "White"
+EHRdefined.OSAcases.Vanderbilt=read.csv(file = 'C:/Users/veatcho/Desktop/Grants/OSA Genetics R01/OSAGenetics_DATA_2018-11-07_1203.csv', header = TRUE, sep = ",", fill=TRUE)
+
+#Read Data with duplicate row names (i.e. indicate no row names skip=1) and allow variables with missing values
+
+CaseBMI<-read.table(file = "C:/Users/Veatcho/Desktop/Grants/OSA Genetics R01/PheWAS project/Potential_OSA_cases_18_88_vitals_bmi_raw.txt", header = TRUE, sep="\t", fill=TRUE)
+Case.ICD9codes<-read.table(file = "C:/Users/Veatcho/Desktop/Grants/OSA Genetics R01/PheWAS project/Potential_OSA_cases_18_88_icd9.txt", header=TRUE, sep="\t", fill=TRUE)
+Case.ICD10code<-read.table(file = "C:/Users/Veatcho/Desktop/Grants/OSA Genetics R01/PheWAS project/Potential_OSA_cases_18_88_icd10.txt", header=TRUE, sep="\t", fill=TRUE)
+
+#Double check that EHR-based definition is correct and pull dates for OSA codes
+#Merge ICD9 and 10s, then identify only inds with codes on two ore more dates (i.e., those meeting EHR-criteria for OSA in BioVU)
+#ICD9s: 327.20 (Organic sleep apnea, unspecified), 327.23 (Obstructive sleep apnea [adult, pediatric]), 327.29 (Other organic sleep apnea), 780.51 (Insomnia with sleep apnea), 780.53 (Hypersomnia with sleep apnea), 780.57 (Sleep apnea [NOS]), 
+#ICD10s: G4730 (Sleep apnea, unspecified), G4733 (Obstructive sleep apnea [adult, pediatric]) and G4739 (Other sleep apnea)
+
+OSAICD9s <- 
+  Case.ICD9codes %>%
+  filter(grepl("leep apnea", CODE_DESC)) %>%
+  group_by(GRID)
+
+#Above code is cleaner and below should produce the same as above....always good to check and useful if there are no fuzzy matches for grep
+OSAICD9snums <- 
+  Case.ICD9codes %>%
+  filter(CODE==327.20 | CODE==327.23 | CODE==327.29 | CODE==780.51 | CODE==780.53 | CODE==780.57)
+
+%>%
+  group_by(GRID)
+
+vandyOSAicd9.10<-full_join(OSAICD9s, Case.ICD10code, by= "GRID")
+
+vandyOSAicd9.10<-mutate(vandyOSAicd9.10, codesascharacters=as.character(V3.x))
+vandyOSAicd9.10<-mutate(vandyOSAicd9.10, codesascharacters.y=as.character(V3.y))
+
+vandyosaicd910distinct<-
+  vandyOSAicd9.10 %>%
+  group_by(V1) %>%
+  mutate(codes.diffdates.9=n_distinct(codesascharacters))
+vandyosaicd910distinct<-
+  vandyosaicd910distinct %>%
+  group_by(V1) %>%
+  mutate(codes.diffdates.10=n_distinct(codesascharacters.y))
+vandyosaicd910distinct <- 
+  mutate(vandyosaicd910distinct, codes.diffdates.9.10=(codes.diffdates.9+codes.diffdates.10))
+  
+EHROSA.icd9.10s.vandy<- vandyosaicd910distinct %>%
+  filter(codes.diffdates.9.10>=2) %>%
+  distinct(V1, .keep_all = TRUE)
+
+#Remove unneccessary data
+rm(EHROSA.icd9.10s.vandy)
+rm(vandyosaicd910distinct)
+rm(vandyOSAicd9.10)
+rm(vandyosaicd9)
+
+#Find BMI at or close to first diagnosis code
+CaseBMI <- 
+  CaseBMI %>%
+  group_by(GRID) %>%
+  separate(TEST_DATE, into = c('BMIDATE', 'BMITIME'), sep = " ") %>%
+  mutate(BMIDATE = as.Date(BMIDATE)) %>%
+  arrange(BMIDATE)
+
+EHRdefined.OSAcases.Vanderbilt <- EHRdefined.OSAcases.Vanderbilt %>%
+  select(GRID=study_id, gender, race) %>%
+  
+
+vandyosaicdsbmi<-
+  full_join(EHROSA.icd9.10s.vandy, vandybmi, by="V1")
+
+vandyosaicdsbmi <-
+  vandyosaicdsbmi %>%
+  group_by(V1) %>% 
+  arrange(V2.x, desc(HT)) %>% slice(which.min(abs(OBS-MOD)))
+
+vandyosaicdsbmi <- df %>%
+  group_by(V1) %>% 
+  slice(which.min(abs(OBS-MOD)))
+vandyosaicdsbmi<-full_join(vandyosaicds, vandybmi, by="V1")
+
+#Generate new variable calculating difference in bmi vs icd date
+```
+
+#Setting Labels
+
+label(data$study_id)="Study ID"
+label(data$gender)="Gender"
+label(data$race)="Race"
+label(data$ethnicity)="Ethnicity"
+label(data$dob)="Date of Birth"
+label(data$deceased)="Deceased"
+label(data$demographics_complete)="Complete?"
+#Setting Units
+
+
+#Setting Factors(will create new variable for factors)
+data$gender.factor = factor(data$gender,levels=c("M","F","U"))
+data$race.factor = factor(data$race,levels=c("B","A","W","H","I","U","M","N"))
+data$ethnicity.factor = factor(data$ethnicity,levels=c("HL","NH","UN"))
+data$deceased.factor = factor(data$deceased,levels=c("Y"))
+data$demographics_complete.factor = factor(data$demographics_complete,levels=c("0","1","2"))
+
+levels(data$gender.factor)=c("Male","Female","Unknown")
+levels(data$race.factor)=c("African American","Asian/Pacific","Caucasian","Hispanic","Native American","Unknown","Multi race","Other")
+levels(data$ethnicity.factor)=c("Hispanic/Latino","Not Hispanic/Latino","Unknown")
+levels(data$deceased.factor)=c("Yes")
+levels(data$demographics_complete.factor)=c("Incomplete","Unverified","Complete")
