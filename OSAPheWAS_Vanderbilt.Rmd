@@ -113,33 +113,23 @@ CaseBMI <- CaseBMI %>%
 OSAICDswithBMI<-
   full_join(ICD9_10Codes.OSA, CaseBMI, by= c("GRID" = "GRID", "ICD9OSA.YR" = "BMI.YR"))
 
-OSAICDswithBMItest <- OSAICDswithBMI %>%
+OSAICDswithBMI <- OSAICDswithBMI %>%
   group_by(GRID, ICD9OSA.YR) %>%
-  mutate(MedBMI.YR=median(BMI_CLEAN)) %>%
-  filter(!is.na(BMI_CLEAN)) %>%
-  distinct(GRID, .keep_all = TRUE)
-
-OSAICDswithBMItest <- OSAICDswithBMI %>%
-  group_by(GRID, ICD9OSA.YR) %>%
-  mutate(MedBMI.YR=median(BMI_CLEAN)) %>%
-  filter(!is.na(BMI_CLEAN)) %>%
+  summarize(MedBMI.YR = median(as.numeric(BMI_CLEAN), na.rm = TRUE)) %>%
+  filter(!is.na(MedBMI.YR)) %>%
   distinct(GRID, .keep_all = TRUE)
 
 #For BMI that was obvious outlier (i.e., <10 or >100), pulled other BMIs within year of code and replaced
-R252967755BMI <- CaseBMI %>%
-filter(GRID=='R252967755', BMI.YR==2007)
+R240914714BMI <- CaseBMI %>%
+  filter(GRID=='R240914714')
 
-OSAICDswithBMI[which(OSAICDswithBMI$GRID=="R252967755"), "BMI_CLEAN"] <- 27.44
+OSAICDswithBMI[which(OSAICDswithBMI$GRID=="R240914714BMI"), "MedBMI.YR"] <- ###
 
-R286920284BMI <- CaseBMI %>%
-filter(GRID=='R286920284', BMI.YR==2003)
+R203261333BMI <- CaseBMI %>%
+  filter(GRID=='R203261333')
 
-OSAICDswithBMI[which(OSAICDswithBMI$GRID=="R286920284"), "BMI_CLEAN"]  <- 26.04
-
-R287285979BMI <-  CaseBMI %>%
-filter(GRID=='R287285979', BMI.YR==2005)
-
-OSAICDswithBMI[which(OSAICDswithBMI$GRID=="R287285979"), "BMI_CLEAN"]  <- 17.2
+R293891428BMI <- CaseBMI %>%
+  filter(GRID=="R293891428")
 
 #Double checking BMI calculations using height and weight pulled from charts
 Case.Height<- read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_cases_18_88/Potential_OSA_cases_18_88_vitals_height_clean.txt", header = TRUE, sep="\t", fill=TRUE, stringsAsFactors = FALSE)
