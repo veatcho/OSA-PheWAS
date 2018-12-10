@@ -24,7 +24,8 @@ EHRdefined.OSAcases.Vanderbilt <- read.csv(file = 'C:/Users/Veatcho/Desktop/OSA-
 
 EHRdefined.OSAcases.Vanderbilt <- EHRdefined.OSAcases.Vanderbilt %>%
   select(GRID=study_id, gender, race, dob) %>%
-  mutate(dob = as.Date(dob, format = "%Y-%m-%d"))
+  mutate(dob = as.Date(dob, format = "%Y-%m-%d")) %>%
+  mutate(DOB.YR = as.numeric(format(dob, '%Y')))
 
 #Pull dates for OSA codes to match with BMI and age
 #ICD9s for OSA: 327.20 (Organic sleep apnea, unspecified), 327.23 (Obstructive sleep apnea [adult, pediatric]), 327.29 (Other organic sleep apnea), 780.51 (Insomnia with sleep apnea), 780.53 (Hypersomnia with sleep apnea), 780.57 (Sleep apnea [NOS]), 
@@ -81,10 +82,10 @@ ICD9_10Codes.OSA <- full_join(ICD9Codes.OSA, ICD10Codes.OSA, by="GRID")
 #  distinct(V1, .keep_all = TRUE)
 
 #Remove unneccessary data
-rm(EHROSA.icd9.10s.vandy)
-rm(vandyosaicd910distinct)
-rm(vandyOSAicd9.10)
-rm(vandyosaicd9)
+#rm(EHROSA.icd9.10s.vandy)
+#rm(vandyosaicd910distinct)
+#rm(vandyOSAicd9.10)
+#rm(vandyosaicd9)
 
 #Find BMI at or close to first diagnosis code of OSA, note that Vandy BMI is wonky
 ICD9_10Codes.OSA <- ICD9_10Codes.OSA %>%
@@ -99,8 +100,6 @@ CaseBMI<-read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_ca
 BMISummaryCases <- CaseBMI %>%
   summarise(meanBMI=mean(BMI_CLEAN), sdBMI=sd(BMI_CLEAN), minBMI=min(BMI_CLEAN), maxBMI=max(BMI_CLEAN), QuantileBMI.05=quantile(BMI_CLEAN, 0.05), QuantileBMI.95=quantile(BMI_CLEAN, 0.95))
 
-n_distinct(CaseBMI$GRID)
-
 #Drop (very likely) inaccurate entries for BMI OR chose the median value of BMI for the year in which the OSA clinical code was used!
 CaseBMI <- CaseBMI %>%
   group_by(GRID) %>%
@@ -113,94 +112,115 @@ CaseBMI <- CaseBMI %>%
 OSAICDswithBMI<-
   full_join(ICD9_10Codes.OSA, CaseBMI, by= c("GRID" = "GRID", "ICD9OSA.YR" = "BMI.YR"))
 
-OSAICDswithBMI <- OSAICDswithBMI %>%
+OSAICDswithBMIMedBMI.YR <- OSAICDswithBMI %>%
+  select(GRID, ICD9CodeDate, ICD9Code, Code.Desc.x, ICD10CodeDate, ICD10Code, Code.Desc.y, ICD9OSA.YR, ICD10.YR, BMI.DATE, BMI_CLEAN, POSSIBLE_PREGNANT) %>%
   group_by(GRID, ICD9OSA.YR) %>%
+  filter(!POSSIBLE_PREGNANT=='Y') %>%
   summarize(MedBMI.YR = median(as.numeric(BMI_CLEAN), na.rm = TRUE)) %>%
-  filter(!is.na(MedBMI.YR)) %>%
   distinct(GRID, .keep_all = TRUE)
 
 #For BMI that was obvious outlier (i.e., <10 or >100), pulled other BMIs within year of code and replaced
 R240914714BMI <- CaseBMI %>%
   filter(GRID=='R240914714')
 
-OSAICDswithBMI[which(OSAICDswithBMI$GRID=="R240914714BMI"), "MedBMI.YR"] <- ###
+OSAICDswithBMIMedBMI.YR[which(OSAICDswithBMIMedBMI.YR$GRID=="R240914714"), "MedBMI.YR"] <- NA
 
 R203261333BMI <- CaseBMI %>%
   filter(GRID=='R203261333')
 
+OSAICDswithBMIMedBMI.YR[which(OSAICDswithBMIMedBMI.YR$GRID=="R203261333"), "MedBMI.YR"] <- NA
+
 R293891428BMI <- CaseBMI %>%
   filter(GRID=="R293891428")
 
+OSAICDswithBMIMedBMI.YR[which(OSAICDswithBMIMedBMI.YR$GRID=="R293891428"), "MedBMI.YR"] <- 15.24
+
+OSAICDswithBMIMedBMI.YR <- OSAICDswithBMIMedBMI.YR %>%
+  filter(!is.na(MedBMI.YR))
+
+EHRdefined.OSAcases.Vanderbilt <- full_join(EHRdefined.OSAcases.Vanderbilt, OSAICDswithBMIMedBMI.YR, by="GRID")
+
+#Remove unneccessary data
+rm(OSAICDswithBMI)
+rm(OSAICDswithBMIMedBMI.YR)
+rm(R203261333BMI)
+rm(R240914714BMI)
+rm(R293891428BMI)
+rm(CaseBMI)
+
 #Double checking BMI calculations using height and weight pulled from charts
-Case.Height<- read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_cases_18_88/Potential_OSA_cases_18_88_vitals_height_clean.txt", header = TRUE, sep="\t", fill=TRUE, stringsAsFactors = FALSE)
+#Case.Height<- read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_cases_18_88/Potential_OSA_cases_18_88_vitals_height_clean.txt", header = TRUE, sep="\t", fill=TRUE, stringsAsFactors = FALSE)
 
-Case.Height <- Case.Height %>%
-  separate(TEST_DATE, into = c('HEIGHT.DATE', 'HEIGHT.TIME'), sep = " ") %>%
-  mutate(HEIGHT.DATE = as.Date(HEIGHT.DATE, format = "%Y-%m-%d")) %>%
-  mutate(HEIGHT.YEAR=as.numeric(format(HEIGHT.DATE, '%Y'))) %>%
-  group_by(GRID) %>%
-  arrange(HEIGHT.DATE)
+#Case.Height <- Case.Height %>%
+#  separate(TEST_DATE, into = c('HEIGHT.DATE', 'HEIGHT.TIME'), sep = " ") %>%
+#  mutate(HEIGHT.DATE = as.Date(HEIGHT.DATE, format = "%Y-%m-%d")) %>%
+#  mutate(HEIGHT.YEAR=as.numeric(format(HEIGHT.DATE, '%Y'))) %>%
+#  group_by(GRID) %>%
+#  arrange(HEIGHT.DATE)
 
-Case.Weight <- read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_cases_18_88/Potential_OSA_cases_18_88_vitals_weight_clean.txt", header = TRUE, sep="\t", fill=TRUE, stringsAsFactors = FALSE)
+#Case.Weight <- read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_cases_18_88/Potential_OSA_cases_18_88_vitals_weight_clean.txt", header = TRUE, sep="\t", fill=TRUE, stringsAsFactors = FALSE)
 
-Case.Weight <- Case.Weight %>%
-  separate(TEST_DATE, into = c('WEIGHT.DATE', 'WEIGHT.TIME'), sep = " ") %>%
-  mutate(WEIGHT.DATE = as.Date(WEIGHT.DATE, format = "%Y-%m-%d")) %>%
-  mutate(WEIGHT.YEAR=as.numeric(format(WEIGHT.DATE, '%Y'))) %>%
-  group_by(GRID) %>%
-  arrange(WEIGHT.DATE)
+#Case.Weight <- Case.Weight %>%
+#  separate(TEST_DATE, into = c('WEIGHT.DATE', 'WEIGHT.TIME'), sep = " ") %>%
+#  mutate(WEIGHT.DATE = as.Date(WEIGHT.DATE, format = "%Y-%m-%d")) %>%
+#  mutate(WEIGHT.YEAR=as.numeric(format(WEIGHT.DATE, '%Y'))) %>%
+#  group_by(GRID) %>%
+#  arrange(WEIGHT.DATE)
 
-Case.Height.Weight <- inner_join(Case.Height, Case.Weight, by = c("GRID" = "GRID", "HEIGHT.YEAR" = "WEIGHT.YEAR"))
+#Case.Height.Weight <- inner_join(Case.Height, Case.Weight, by = c("GRID" = "GRID", "HEIGHT.YEAR" = "WEIGHT.YEAR"))
 
-Case.Height.Weight.BMI <- Case.Height.Weight %>%
-  mutate(Weight_kg=(WEIGHT_CLEAN*0.453592), Height_cm=(HEIGHT_CLEAN*2.54)) %>%
-  mutate(Case.BMIraw=(WEIGHT_CLEAN/HEIGHT_CLEAN)) %>%
-  mutate(Case.BMI_adjusted=(Weight_kg/(Height_cm/100))) %>%
-  mutate(Case.BMI_adjustedheight=(WEIGHT_CLEAN/(Height_cm/100))) %>%
-  mutate(Case.BMI_adjustedweight=(Weight_kg/HEIGHT_CLEAN))
+#Case.Height.Weight.BMI <- Case.Height.Weight %>%
+#  mutate(Weight_kg=(WEIGHT_CLEAN*0.453592), Height_cm=(HEIGHT_CLEAN*2.54)) %>%
+#  mutate(Case.BMIraw=(WEIGHT_CLEAN/HEIGHT_CLEAN)) %>%
+#  mutate(Case.BMI_adjusted=(Weight_kg/(Height_cm/100))) %>%
+#  mutate(Case.BMI_adjustedheight=(WEIGHT_CLEAN/(Height_cm/100))) %>%
+#  mutate(Case.BMI_adjustedweight=(Weight_kg/HEIGHT_CLEAN))
 
-CaseBMI.calc.adj <- full_join(ICD9_10Codes.OSA [, c(1, 10)], Case.Height.Weight.BMI [, c(1, 5, 13)], by= c("GRID" = "GRID", "ICD9OSA.YR" = "HEIGHT.YEAR"))
+#CaseBMI.calc.adj <- full_join(ICD9_10Codes.OSA [, c(1, 10)], Case.Height.Weight.BMI [, c(1, 5, 13)], by= c("GRID" = "GRID", "ICD9OSA.YR" = "HEIGHT.YEAR"))
 
-CaseBMI.calc.adj <- CaseBMI.calc.adj %>%
-  group_by(GRID) %>%
-  filter(!is.na(Case.BMI_adjusted)) %>%
-  distinct(GRID, .keep_all = TRUE)
+#CaseBMI.calc.adj <- CaseBMI.calc.adj %>%
+#  group_by(GRID) %>%
+#  filter(!is.na(Case.BMI_adjusted)) %>%
+#  distinct(GRID, .keep_all = TRUE)
                                  
 #Identify age at first use of OSA-related clinical code
 EHRdefined.OSAcases.Vanderbilt <- EHRdefined.OSAcases.Vanderbilt %>%
-  mutate(YOB=as.numeric(format(dob, '%Y'))) %>%
-  filter(!is.na(dob))
-OSAICDswithAge<-
-  full_join(ICD9_10Codes.OSA, EHRdefined.OSAcases.Vanderbilt, by= c("GRID" = "GRID", "ICD9OSA.YR" = ""))
+  mutate(AgeatDx=as.numeric(ICD9OSA.YR-DOB.YR)) %>%
+  filter(AgeatDx >= 18 & AgeatDx <= 88)
+  
+
 #Attach demographic data to EHR-defined OSA case data, exclude individuals with missing BMI, and summarize race, gender, age, BMI
 #CaseDemo<-read.table(file = "C:/Users/Veatcho/Desktop/OSA-PheWAS/Potential_OSA_cases_18_88/Potential_OSA_cases_18_88_demo.txt", header = TRUE, sep="\t", fill=TRUE, stringsAsFactors = FALSE)
 
-EHRdefined.OSAcases.Vanderbilt <- full_join(OSAICDswithBMI, EHRdefined.OSAcases.Vanderbilt, by="GRID")
-
-EHRdefined.OSAcases.Vanderbilt <- EHRdefined.OSAcases.Vanderbilt %>%
-  filter(!is.na(BMI_CLEAN))
-
-EHRdefined.OSAcases.Vanderbilt <- ungroup(EHRdefined.OSAcases.Vanderbilt)
+AgeDemoCases <- EHRdefined.OSAcases.Vanderbilt %>%
+  summarise(meanAgeatDx=mean(AgeatDx), sdAgeatDx=sd(AgeatDx), minAgeatDx=min(AgeatDx), maxAgeatDx=max(AgeatDx), QuantileAgeatDx.05=quantile(AgeatDx, 0.05), QuantileAgeatDx.95=quantile(AgeatDx, 0.95))
+  
+BMISummaryCases <- EHRdefined.OSAcases.Vanderbilt %>%
+  filter(!is.na(MedBMI.YR)) %>%
+  summarise(meanBMI=mean(MedBMI.YR), sdBMI=sd(MedBMI.YR), minBMI=min(MedBMI.YR), maxBMI=max(MedBMI.YR), QuantileBMI.05=quantile(MedBMI.YR, 0.05), QuantileBMI.95=quantile(MedBMI.YR, 0.95))
 
 RaceDemoCases <- EHRdefined.OSAcases.Vanderbilt %>%
   count(race) %>%
-  mutate(proportion.race=(n/6721))
+  mutate(proportion.race=(n/6465))
 
 GenderDemoCases <- EHRdefined.OSAcases.Vanderbilt %>%
   count(gender) %>%
-  mutate(proportion.gender= (n/6721))
-
-BMISummaryCases_clean <- EHRdefined.OSAcases.Vanderbilt %>%
-  summarise(meanBMI=mean(BMI_CLEAN), sdBMI=sd(BMI_CLEAN), minBMI=min(BMI_CLEAN), maxBMI=max(BMI_CLEAN), QuantileBMI.25=quantile(BMI_CLEAN, 0.25), QuantileBMI.75=quantile(BMI_CLEAN, 0.75))
+  mutate(proportion.gender= (n/6465))
 
 #Remove unneccessary data
-rm(CaseBMI)
 rm(ICD9Codes.OSA)
 rm(ICD10Codes.OSA)
 rm(ICD9_10Codes.OSA)
-rm(OSAICDswithBMI)
+rm(AgeDemoCases)
+rm(BMISummaryCases)
+rm(GenderDemoCases)
+rm(RaceDemoCases)
 ```
 
+2) Identify most recent BMI and age in years for EHR-defined controls
+``` {r eval=TRUE}
+
+```
 
 #Setting Labels
 
